@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarefas + Clima</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:20px}
+  main{max-width:520px;margin:0 auto}
+  h1{text-align:center}
+  section{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px}
+  form{display:flex;gap:8px}
+  input{flex:1;padding:10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:inherit}
+  button{padding:10px 14px;border:0;border-radius:8px;background:#3b82f6;color:#fff;cursor:pointer}
+  ul{list-style:none;padding:0;margin:12px 0 0}
+  li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #334155}
+  li span{flex:1}
+  li.feita span{text-decoration:line-through;opacity:.5}
+  li button{background:#ef4444;padding:4px 8px}
+  #resultadoClima{margin-top:12px;font-size:1.1rem}
+</style>
+</head>
+<body>
+<main>
+  <h1>Tarefas + Clima</h1>
+
+  <!-- PARTE 1: CLIMA (consome uma API pública) -->
+  <section>
+    <h2>Previsão do tempo</h2>
+    <form id="formClima">
+      <input id="cidade" placeholder="Digite uma cidade" required>
+      <button>Buscar</button>
+    </form>
+    <div id="resultadoClima"></div>
+  </section>
+
+  <!-- PARTE 2: TAREFAS (salvas no navegador com localStorage) -->
+  <section>
+    <h2>Minhas tarefas</h2>
+    <form id="formTarefa">
+      <input id="novaTarefa" placeholder="Nova tarefa" required>
+      <button>Adicionar</button>
+    </form>
+    <ul id="lista"></ul>
+  </section>
+</main>
+
+<script>
+/* ---------- CLIMA ---------- */
+const formClima = document.getElementById('formClima');
+const resultadoClima = document.getElementById('resultadoClima');
+
+// Códigos de tempo da API Open-Meteo traduzidos
+function descricaoClima(codigo){
+  if (codigo === 0) return 'Céu limpo ☀️';
+  if (codigo <= 3) return 'Parcialmente nublado ⛅';
+  if (codigo <= 48) return 'Neblina 🌫️';
+  if (codigo <= 67) return 'Chuva 🌧️';
+  if (codigo <= 77) return 'Neve ❄️';
+  if (codigo <= 82) return 'Pancadas de chuva 🌦️';
+  return 'Tempestade ⛈️';
+}
+
+formClima.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const cidade = document.getElementById('cidade').value.trim();
+  resultadoClima.textContent = 'Buscando...';
+  try {
+    // 1) transforma o nome da cidade em latitude e longitude
+    const geo = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cidade)}&count=1&language=pt`
+    ).then(r => r.json());
+    if (!geo.results) { resultadoClima.textContent = 'Cidade não encontrada.'; return; }
+    const { latitude, longitude, name, admin1 } = geo.results[0];
+
+    // 2) busca o tempo atual naquelas coordenadas
+    const clima = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`
+    ).then(r => r.json());
+    const atual = clima.current;
+
+    resultadoClima.textContent =
+      `${name}${admin1 ? ' - ' + admin1 : ''}: ${atual.temperature_2m}°C, ${descricaoClima(atual.weather_code)}`;
+  } catch (erro) {
+    resultadoClima.textContent = 'Erro ao buscar o clima. Verifique a internet.';
+  }
+});
+
+/* ---------- TAREFAS ---------- */
+const formTarefa = document.getElementById('formTarefa');
+const lista = document.getElementById('lista');
+
+// Carrega do navegador (ou começa vazio)
+let tarefas = JSON.parse(localStorage.getItem('tarefas')) || [];
+
+function salvar(){ localStorage.setItem('tarefas', JSON.stringify(tarefas)); }
+
+function mostrar(){
+  lista.innerHTML = '';
+  tarefas.forEach((t, i) => {
+    const li = document.createElement('li');
+    if (t.feita) li.className = 'feita';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = t.feita;
+    check.style.flex = 'none';
+    check.onchange = () => { tarefas[i].feita = check.checked; salvar(); mostrar(); };
+
+    const texto = document.createElement('span');
+    texto.textContent = t.texto;   // textContent evita injeção de HTML
+
+    const apagar = document.createElement('button');
+    apagar.textContent = 'X';
+    apagar.onclick = () => { tarefas.splice(i, 1); salvar(); mostrar(); };
+
+    li.append(check, texto, apagar);
+    lista.appendChild(li);
+  });
+}
+
+formTarefa.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const campo = document.getElementById('novaTarefa');
+  tarefas.push({ texto: campo.value.trim(), feita: false });
+  campo.value = '';
+  salvar();
+  mostrar();
+});
+
+mostrar();
+</script>
+</body>
+</html>
